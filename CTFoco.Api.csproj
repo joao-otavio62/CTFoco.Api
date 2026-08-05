@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UserSecretsId>ctfoco-api-secrets</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.8" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.8" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.8">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+  </ItemGroup>
+
+  <!--
+    Observação: este projeto foi configurado para usar SQLite por padrão (arquivo local,
+    zero configuração de servidor), ideal para desenvolvimento e demonstração.
+
+    Para usar SQL Server ou PostgreSQL em produção, troque o provider em Program.cs:
+      - SQL Server: Microsoft.EntityFrameworkCore.SqlServer + UseSqlServer(connectionString)
+      - PostgreSQL: Npgsql.EntityFrameworkCore.PostgreSQL + UseNpgsql(connectionString)
+  -->
+
+</Project>
