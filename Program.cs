@@ -80,11 +80,9 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontEnd", policy =>
     {
-        policy.WithOrigins(
-                builder.Configuration.GetSection("CorsOrigins").Get<string[]>()
-                ?? new[] { "http://localhost:5173" })
-            .AllowAnyHeader()
-            .AllowAnyMethod();
+        policy.AllowAnyOrigin() 
+              .AllowAnyHeader()
+              .AllowAnyMethod();
     });
 });
 
