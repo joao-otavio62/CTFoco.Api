@@ -14,6 +14,11 @@ public class PontoService : IPontoService
 {
     private const double JornadaPadraoHoras = 8.0;
 
+    // Garante compatibilidade de timezone tanto em Windows quanto em Linux/Docker
+    private static readonly TimeZoneInfo FusoBrasilia = TimeZoneInfo.FindSystemTimeZoneById(
+        OperatingSystem.IsWindows() ? "E. South America Standard Time" : "America/Sao_Paulo"
+    );
+
     private readonly AppDbContext _context;
 
     public PontoService(AppDbContext context)
@@ -36,11 +41,10 @@ public class PontoService : IPontoService
 
     public async Task<StatusDiaDto> ObterStatusDoDiaAsync(int usuarioId)
     {
-        var hoje = DateTime.UtcNow.Date;
-        var amanha = hoje.AddDays(1);
+        var (inicioUtc, fimUtc) = ObterLimitesDoDiaUtc(DateTime.UtcNow);
 
         var registrosHoje = await _context.RegistrosPonto
-            .Where(r => r.UsuarioId == usuarioId && r.DataHoraRegistro >= hoje && r.DataHoraRegistro < amanha)
+            .Where(r => r.UsuarioId == usuarioId && r.DataHoraRegistro >= inicioUtc && r.DataHoraRegistro < fimUtc)
             .OrderBy(r => r.DataHoraRegistro)
             .ToListAsync();
 
@@ -57,11 +61,10 @@ public class PontoService : IPontoService
 
     public async Task<RegistroPontoResponseDto> RegistrarPontoAsync(int usuarioId, string? ipAddress)
     {
-        var hoje = DateTime.UtcNow.Date;
-        var amanha = hoje.AddDays(1);
+        var (inicioUtc, fimUtc) = ObterLimitesDoDiaUtc(DateTime.UtcNow);
 
         var ultimoRegistroHoje = await _context.RegistrosPonto
-            .Where(r => r.UsuarioId == usuarioId && r.DataHoraRegistro >= hoje && r.DataHoraRegistro < amanha)
+            .Where(r => r.UsuarioId == usuarioId && r.DataHoraRegistro >= inicioUtc && r.DataHoraRegistro < fimUtc)
             .OrderByDescending(r => r.DataHoraRegistro)
             .FirstOrDefaultAsync();
 
@@ -76,7 +79,6 @@ public class PontoService : IPontoService
         {
             UsuarioId = usuarioId,
             TipoRegistro = proximoTipo.Value,
-            // Horário capturado SEMPRE no servidor - nunca confiar em dado enviado pelo cliente (RNF).
             DataHoraRegistro = DateTime.UtcNow,
             IpAddress = ipAddress
         };
@@ -104,7 +106,7 @@ public class PontoService : IPontoService
         var registros = await query.ToListAsync();
 
         var agrupado = registros
-            .GroupBy(r => new { r.UsuarioId, Dia = r.DataHoraRegistro.Date })
+            .GroupBy(r => new { r.UsuarioId, Dia = ParaHorarioBrasilia(r.DataHoraRegistro).Date })
             .Select(g =>
             {
                 var entrada = g.FirstOrDefault(r => r.TipoRegistro == TipoRegistro.Entrada)?.DataHoraRegistro;
@@ -132,10 +134,10 @@ public class PontoService : IPontoService
                     UsuarioId = g.Key.UsuarioId,
                     NomeUsuario = g.First().Usuario?.Nome ?? "-",
                     Data = g.Key.Dia,
-                    Entrada = entrada,
-                    InicioIntervalo = inicioIntervalo,
-                    FimIntervalo = fimIntervalo,
-                    Saida = saida,
+                    Entrada = entrada.HasValue ? ParaHorarioBrasilia(entrada.Value) : null,
+                    InicioIntervalo = inicioIntervalo.HasValue ? ParaHorarioBrasilia(inicioIntervalo.Value) : null,
+                    FimIntervalo = fimIntervalo.HasValue ? ParaHorarioBrasilia(fimIntervalo.Value) : null,
+                    Saida = saida.HasValue ? ParaHorarioBrasilia(saida.Value) : null,
                     HorasTrabalhadas = horasTrabalhadas,
                     SaldoHoras = Math.Round(horasTrabalhadas - JornadaPadraoHoras, 2),
                     Status = status
@@ -153,8 +155,26 @@ public class PontoService : IPontoService
         Id = r.Id,
         TipoRegistro = r.TipoRegistro,
         TipoRegistroDescricao = DescricaoTipo(r.TipoRegistro),
-        DataHoraRegistro = r.DataHoraRegistro
+        DataHoraRegistro = ParaHorarioBrasilia(r.DataHoraRegistro)
     };
+
+    private static DateTime ParaHorarioBrasilia(DateTime utcDate)
+    {
+        var dataUtc = DateTime.SpecifyKind(utcDate, DateTimeKind.Utc);
+        return TimeZoneInfo.ConvertTimeFromUtc(dataUtc, FusoBrasilia);
+    }
+
+    private static (DateTime InicioUtc, DateTime FimUtc) ObterLimitesDoDiaUtc(DateTime utcNow)
+    {
+        var agoraBrasilia = ParaHorarioBrasilia(utcNow);
+        var inicioDiaBrasilia = agoraBrasilia.Date;
+        var fimDiaBrasilia = inicioDiaBrasilia.AddDays(1);
+
+        var inicioUtc = TimeZoneInfo.ConvertTimeToUtc(inicioDiaBrasilia, FusoBrasilia);
+        var fimUtc = TimeZoneInfo.ConvertTimeToUtc(fimDiaBrasilia, FusoBrasilia);
+
+        return (inicioUtc, fimUtc);
+    }
 
     private static string DescricaoTipo(TipoRegistro tipo) => tipo switch
     {
