@@ -279,3 +279,11 @@ C:\Users\joaos\Downloads\ctfoco-ponto\ctfoco-ponto-backend\CTFoco.Api\obj\Debug\
 C:\Users\joaos\Downloads\ctfoco-ponto\ctfoco-ponto-backend\CTFoco.Api\obj\Debug\net8.0\CTFoco.Api.genruntimeconfig.cache
 C:\Users\joaos\Downloads\ctfoco-ponto\ctfoco-ponto-backend\CTFoco.Api\obj\Debug\net8.0\ref\CTFoco.Api.dll
 C:\Users\joaos\Downloads\ctfoco-ponto\ctfoco-ponto-backend\CTFoco.Api\obj\Debug\net8.0\CTFoco.Api.sourcelink.json
+C:\Users\joaos\Downloads\ctfoco-ponto\ctfoco-ponto-backend\CTFoco.Api\bin\Debug\net8.0\Microsoft.Extensions.Caching.Memory.dll
+C:\Users\joaos\Downloads\ctfoco-ponto\ctfoco-ponto-backend\CTFoco.Api\bin\Debug\net8.0\Microsoft.Extensions.DependencyInjection.dll
+C:\Users\joaos\Downloads\ctfoco-ponto\ctfoco-ponto-backend\CTFoco.Api\bin\Debug\net8.0\Microsoft.Extensions.DependencyInjection.Abstractions.dll
+C:\Users\joaos\Downloads\ctfoco-ponto\ctfoco-ponto-backend\CTFoco.Api\bin\Debug\net8.0\Microsoft.Extensions.Logging.dll
+C:\Users\joaos\Downloads\ctfoco-ponto\ctfoco-ponto-backend\CTFoco.Api\bin\Debug\net8.0\Microsoft.Extensions.Logging.Abstractions.dll
+C:\Users\joaos\Downloads\ctfoco-ponto\ctfoco-ponto-backend\CTFoco.Api\bin\Debug\net8.0\Microsoft.Extensions.Options.dll
+C:\Users\joaos\Downloads\ctfoco-ponto\ctfoco-ponto-backend\CTFoco.Api\bin\Debug\net8.0\Npgsql.dll
+C:\Users\joaos\Downloads\ctfoco-ponto\ctfoco-ponto-backend\CTFoco.Api\bin\Debug\net8.0\Npgsql.EntityFrameworkCore.PostgreSQL.dll
