@@ -78,9 +78,12 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization();
 
 // ---------- CORS ----------
+var builder = WebApplication.CreateBuilder(args);
+
+// Configuração do CORS
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("FrontEnd", policy =>
+    options.AddPolicy("AllowAll", policy =>
     {
         policy.AllowAnyOrigin()
               .AllowAnyHeader()
