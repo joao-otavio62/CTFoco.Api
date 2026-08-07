@@ -41,12 +41,21 @@ public class PontoService : IPontoService
 
     public async Task<StatusDiaDto> ObterStatusDoDiaAsync(int usuarioId)
     {
-        var (inicioUtc, fimUtc) = ObterLimitesDoDiaUtc(DateTime.UtcNow);
+        var agoraBrasilia = ParaHorarioBrasilia(DateTime.UtcNow);
+        var hojeBrasilia = agoraBrasilia.Date;
 
-        var registrosHoje = await _context.RegistrosPonto
-            .Where(r => r.UsuarioId == usuarioId && r.DataHoraRegistro >= inicioUtc && r.DataHoraRegistro < fimUtc)
+        // Traz registros das últimas 48h para evitar gargalos de fuso na query SQL
+        var dataCorteUtc = DateTime.UtcNow.AddDays(-2);
+
+        var registrosRecentes = await _context.RegistrosPonto
+            .Where(r => r.UsuarioId == usuarioId && r.DataHoraRegistro >= dataCorteUtc)
             .OrderBy(r => r.DataHoraRegistro)
             .ToListAsync();
+
+        // Filtra em memória garantindo a data exata no fuso de Brasília
+        var registrosHoje = registrosRecentes
+            .Where(r => ParaHorarioBrasilia(r.DataHoraRegistro).Date == hojeBrasilia)
+            .ToList();
 
         var ultimo = registrosHoje.LastOrDefault();
         var proximo = ObterProximoTipo(ultimo?.TipoRegistro);
@@ -61,16 +70,9 @@ public class PontoService : IPontoService
 
     public async Task<RegistroPontoResponseDto> RegistrarPontoAsync(int usuarioId, string? ipAddress)
     {
-        var (inicioUtc, fimUtc) = ObterLimitesDoDiaUtc(DateTime.UtcNow);
+        var statusAtual = await ObterStatusDoDiaAsync(usuarioId);
 
-        var ultimoRegistroHoje = await _context.RegistrosPonto
-            .Where(r => r.UsuarioId == usuarioId && r.DataHoraRegistro >= inicioUtc && r.DataHoraRegistro < fimUtc)
-            .OrderByDescending(r => r.DataHoraRegistro)
-            .FirstOrDefaultAsync();
-
-        var proximoTipo = ObterProximoTipo(ultimoRegistroHoje?.TipoRegistro);
-
-        if (proximoTipo == null)
+        if (statusAtual.CicloCompleto || statusAtual.ProximoRegistro == null)
         {
             throw new InvalidOperationException("O ciclo de ponto do dia já foi concluído (Entrada, Intervalo e Saída já registrados).");
         }
@@ -78,7 +80,7 @@ public class PontoService : IPontoService
         var registro = new RegistroPonto
         {
             UsuarioId = usuarioId,
-            TipoRegistro = proximoTipo.Value,
+            TipoRegistro = statusAtual.ProximoRegistro.Value,
             DataHoraRegistro = DateTime.UtcNow,
             IpAddress = ipAddress
         };
@@ -93,12 +95,12 @@ public class PontoService : IPontoService
 
     public async Task<List<RelatorioDiaDto>> GerarRelatorioAsync(DateTime dataInicio, DateTime dataFim, int? usuarioId)
     {
-        var inicio = dataInicio.Date;
-        var fim = dataFim.Date.AddDays(1);
+        var inicioBuscaUtc = dataInicio.Date.AddDays(-1);
+        var fimBuscaUtc = dataFim.Date.AddDays(2);
 
         var query = _context.RegistrosPonto
             .Include(r => r.Usuario)
-            .Where(r => r.DataHoraRegistro >= inicio && r.DataHoraRegistro < fim);
+            .Where(r => r.DataHoraRegistro >= inicioBuscaUtc && r.DataHoraRegistro < fimBuscaUtc);
 
         if (usuarioId.HasValue)
             query = query.Where(r => r.UsuarioId == usuarioId.Value);
@@ -106,13 +108,17 @@ public class PontoService : IPontoService
         var registros = await query.ToListAsync();
 
         var agrupado = registros
-            .GroupBy(r => new { r.UsuarioId, Dia = ParaHorarioBrasilia(r.DataHoraRegistro).Date })
+            .Select(r => new { Registro = r, DataBrasilia = ParaHorarioBrasilia(r.DataHoraRegistro) })
+            .Where(x => x.DataBrasilia.Date >= dataInicio.Date && x.DataBrasilia.Date <= dataFim.Date)
+            .GroupBy(x => new { x.Registro.UsuarioId, Dia = x.DataBrasilia.Date })
             .Select(g =>
             {
-                var entrada = g.FirstOrDefault(r => r.TipoRegistro == TipoRegistro.Entrada)?.DataHoraRegistro;
-                var inicioIntervalo = g.FirstOrDefault(r => r.TipoRegistro == TipoRegistro.InicioIntervalo)?.DataHoraRegistro;
-                var fimIntervalo = g.FirstOrDefault(r => r.TipoRegistro == TipoRegistro.FimIntervalo)?.DataHoraRegistro;
-                var saida = g.FirstOrDefault(r => r.TipoRegistro == TipoRegistro.Saida)?.DataHoraRegistro;
+                var registrosDoDia = g.Select(x => x.Registro).OrderBy(r => r.DataHoraRegistro).ToList();
+
+                var entrada = registrosDoDia.FirstOrDefault(r => r.TipoRegistro == TipoRegistro.Entrada)?.DataHoraRegistro;
+                var inicioIntervalo = registrosDoDia.FirstOrDefault(r => r.TipoRegistro == TipoRegistro.InicioIntervalo)?.DataHoraRegistro;
+                var fimIntervalo = registrosDoDia.FirstOrDefault(r => r.TipoRegistro == TipoRegistro.FimIntervalo)?.DataHoraRegistro;
+                var saida = registrosDoDia.FirstOrDefault(r => r.TipoRegistro == TipoRegistro.Saida)?.DataHoraRegistro;
 
                 double horasTrabalhadas = 0;
                 var cicloCompleto = entrada.HasValue && saida.HasValue;
@@ -132,7 +138,7 @@ public class PontoService : IPontoService
                 return new RelatorioDiaDto
                 {
                     UsuarioId = g.Key.UsuarioId,
-                    NomeUsuario = g.First().Usuario?.Nome ?? "-",
+                    NomeUsuario = g.First().Registro.Usuario?.Nome ?? "-",
                     Data = g.Key.Dia,
                     Entrada = entrada.HasValue ? ParaHorarioBrasilia(entrada.Value) : null,
                     InicioIntervalo = inicioIntervalo.HasValue ? ParaHorarioBrasilia(inicioIntervalo.Value) : null,
@@ -160,20 +166,11 @@ public class PontoService : IPontoService
 
     private static DateTime ParaHorarioBrasilia(DateTime utcDate)
     {
-        var dataUtc = DateTime.SpecifyKind(utcDate, DateTimeKind.Utc);
+        var dataUtc = utcDate.Kind == DateTimeKind.Utc
+            ? utcDate
+            : DateTime.SpecifyKind(utcDate, DateTimeKind.Utc);
+
         return TimeZoneInfo.ConvertTimeFromUtc(dataUtc, FusoBrasilia);
-    }
-
-    private static (DateTime InicioUtc, DateTime FimUtc) ObterLimitesDoDiaUtc(DateTime utcNow)
-    {
-        var agoraBrasilia = ParaHorarioBrasilia(utcNow);
-        var inicioDiaBrasilia = agoraBrasilia.Date;
-        var fimDiaBrasilia = inicioDiaBrasilia.AddDays(1);
-
-        var inicioUtc = TimeZoneInfo.ConvertTimeToUtc(inicioDiaBrasilia, FusoBrasilia);
-        var fimUtc = TimeZoneInfo.ConvertTimeToUtc(fimDiaBrasilia, FusoBrasilia);
-
-        return (inicioUtc, fimUtc);
     }
 
     private static string DescricaoTipo(TipoRegistro tipo) => tipo switch
