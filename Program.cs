@@ -8,7 +8,6 @@ using Microsoft.IdentityModel.Tokens;
 var builder = WebApplication.CreateBuilder(args);
 
 // ---------- Serviços ----------
-
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -41,15 +40,18 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-// Banco de dados (SQLite por padrão - ver observação no .csproj para trocar por SQL Server/PostgreSQL)
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=ctfoco.db";
-builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite(connectionString));
+// ---------- Banco de dados (PostgreSQL) ----------
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException("A connection string 'DefaultConnection' não foi encontrada no appsettings.json.");
 
-// Serviços de domínio
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(connectionString));
+
+// ---------- Serviços de domínio ----------
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IPontoService, PontoService>();
 
-// Autenticação JWT (RNF Segurança)
+// ---------- Autenticação JWT (RNF Segurança) ----------
 var jwtSettings = builder.Configuration.GetSection("Jwt");
 var chave = jwtSettings["Key"]!;
 
@@ -75,12 +77,12 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 
-// CORS liberado para o front-end (React) em desenvolvimento
+// ---------- CORS ----------
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontEnd", policy =>
     {
-        policy.AllowAnyOrigin() 
+        policy.AllowAnyOrigin()
               .AllowAnyHeader()
               .AllowAnyMethod();
     });
@@ -88,15 +90,18 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// ---------- Seed do banco (RF01 - credenciais predefinidas) ----------
+// ---------- Seed do banco ----------
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    // Aplica as migrations automaticamente na inicialização (opcional, mas recomendado para PostgreSQL)
+    db.Database.Migrate();
+
     SeedData.Inicializar(db);
 }
 
 // ---------- Pipeline HTTP ----------
-
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -104,12 +109,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
 app.UseCors("FrontEnd");
-
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();

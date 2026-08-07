@@ -278,3 +278,4 @@ C:\Users\joaos\Downloads\ctfoco-ponto\ctfoco-ponto-backend\CTFoco.Api\obj\Debug\
 C:\Users\joaos\Downloads\ctfoco-ponto\ctfoco-ponto-backend\CTFoco.Api\obj\Debug\net8.0\CTFoco.Api.pdb
 C:\Users\joaos\Downloads\ctfoco-ponto\ctfoco-ponto-backend\CTFoco.Api\obj\Debug\net8.0\CTFoco.Api.genruntimeconfig.cache
 C:\Users\joaos\Downloads\ctfoco-ponto\ctfoco-ponto-backend\CTFoco.Api\obj\Debug\net8.0\ref\CTFoco.Api.dll
+C:\Users\joaos\Downloads\ctfoco-ponto\ctfoco-ponto-backend\CTFoco.Api\obj\Debug\net8.0\CTFoco.Api.sourcelink.json

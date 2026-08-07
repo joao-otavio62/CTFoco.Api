@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("CTFoco.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b3533cfdb20e1d30a9043846417fcf87746ec46d")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3ade49963d66b4e304b2d00fb2bebf4532c96263")]
 [assembly: System.Reflection.AssemblyProductAttribute("CTFoco.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("CTFoco.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
