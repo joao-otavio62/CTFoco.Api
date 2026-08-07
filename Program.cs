@@ -95,8 +95,8 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-    // Garante que o banco e as tabelas sejam criados se não existirem
-    db.Database.EnsureCreated();
+    // Aplica as migrations automaticamente na inicialização (PostgreSQL no Neon DB)
+    db.Database.Migrate();
 
     SeedData.Inicializar(db);
 }
