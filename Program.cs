@@ -78,9 +78,6 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization();
 
 // ---------- CORS ----------
-var builder = WebApplication.CreateBuilder(args);
-
-// Configuração do CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
@@ -98,7 +95,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-    // Aplica as migrations automaticamente na inicialização (opcional, mas recomendado para PostgreSQL)
+    // Aplica as migrations automaticamente na inicialização (PostgreSQL no Neon DB)
     db.Database.Migrate();
 
     SeedData.Inicializar(db);
@@ -112,9 +109,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.UseCors("FrontEnd");
+app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
 
 app.Run();
