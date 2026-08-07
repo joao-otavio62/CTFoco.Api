@@ -1,88 +1,118 @@
+using System.Text;
 using CTFoco.Api.Data;
-using CTFoco.Api.DTOs;
 using CTFoco.Api.Services;
-using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Authorization;
+using Microsoft.IdentityModel.Tokens;
 
-namespace CTFoco.Api.Controllers;
+var builder = WebApplication.CreateBuilder(args);
 
-[ApiController]
-[Route("auth")]      // Aceita requisições para /auth/login
-[Route("api/auth")]  // Aceita requisições para /api/auth/login
-public class AuthController : ControllerBase
+// ---------- Serviços ----------
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
 {
-    private readonly AppDbContext _context;
-    private readonly ITokenService _tokenService;
+    options.SwaggerDoc("v1", new() { Title = "CT FOCO - Módulo de Ponto API", Version = "v1" });
 
-    public AuthController(AppDbContext context, ITokenService tokenService)
+    options.AddSecurityDefinition("Bearer", new()
     {
-        _context = context;
-        _tokenService = tokenService;
-    }
+        Name = "Authorization",
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Description = "Informe: Bearer {seu_token}"
+    });
 
-    /// <summary>
-    /// Permite que o usuário autenticado altere sua própria senha.
-    /// </summary>
-    [Authorize]
-    [HttpPut("alterar-senha")]
-    public async Task<IActionResult> AlterarSenha([FromBody] AlterarSenhaRequestDto request)
+    options.AddSecurityRequirement(new()
     {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-        if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
         {
-            return Unauthorized(new { mensagem = "Token inválido ou usuário não autenticado." });
-        }
-
-        var usuario = await _context.Usuarios.FindAsync(userId);
-
-        if (usuario == null || !usuario.Ativo)
-        {
-            return NotFound(new { mensagem = "Usuário não encontrado ou inativo." });
-        }
-
-        if (!BCrypt.Net.BCrypt.Verify(request.SenhaAtual, usuario.PasswordHash))
-        {
-            return BadRequest(new { mensagem = "A senha atual está incorreta." });
-        }
-
-        usuario.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NovaSenha);
-
-        _context.Usuarios.Update(usuario);
-        await _context.SaveChangesAsync();
-
-        return Ok(new { mensagem = "Senha alterada com sucesso." });
-    }
-
-    /// <summary>
-    /// RF01 - Autenticação via usuário e senha predefinidos (sem cadastro aberto).
-    /// </summary>
-    [HttpPost("login")]
-    public async Task<ActionResult<LoginResponseDto>> Login([FromBody] LoginRequestDto request)
-    {
-        var usuario = await _context.Usuarios
-            .FirstOrDefaultAsync(u => u.Username == request.Username && u.Ativo);
-
-        if (usuario == null || !BCrypt.Net.BCrypt.Verify(request.Password, usuario.PasswordHash))
-        {
-            return Unauthorized(new { mensagem = "Usuário ou senha inválidos." });
-        }
-
-        var (token, expiraEm) = _tokenService.GerarToken(usuario);
-
-        return Ok(new LoginResponseDto
-        {
-            Token = token,
-            ExpiraEm = expiraEm,
-            Usuario = new UsuarioDto
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
             {
-                Id = usuario.Id,
-                Nome = usuario.Nome,
-                Username = usuario.Username,
-                Role = usuario.Role
-            }
-        });
-    }
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                {
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
+
+// ---------- Banco de dados (PostgreSQL) ----------
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException("A connection string 'DefaultConnection' não foi encontrada no appsettings.json.");
+
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(connectionString));
+
+// ---------- Serviços de domínio ----------
+builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IPontoService, PontoService>();
+
+// ---------- Autenticação JWT (RNF Segurança) ----------
+var jwtSettings = builder.Configuration.GetSection("Jwt");
+var chave = jwtSettings["Key"]!;
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = jwtSettings["Issuer"],
+        ValidAudience = jwtSettings["Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(chave)),
+        ClockSkew = TimeSpan.FromMinutes(1)
+    };
+});
+
+builder.Services.AddAuthorization();
+
+// ---------- CORS ----------
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
+var app = builder.Build();
+
+// ---------- Seed do banco ----------
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    // Aplica as migrations automaticamente na inicialização (PostgreSQL no Neon DB)
+    db.Database.Migrate();
+
+    SeedData.Inicializar(db);
 }
+
+// ---------- Pipeline HTTP ----------
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "CT FOCO - Módulo de Ponto API v1");
+    c.RoutePrefix = "swagger";
+});
+
+app.UseHttpsRedirection();
+app.UseCors("AllowAll");
+app.UseAuthentication();
+app.UseAuthorization();
+app.MapControllers();
+
+app.Run();
