@@ -88,15 +88,18 @@ public class PontoService : IPontoService
 
     public async Task<List<RelatorioDiaDto>> GerarRelatorioAsync(DateTime dataInicio, DateTime dataFim, int? usuarioId)
     {
-        var inicioBuscaUtc = dataInicio.Date.AddDays(-1);
-        var fimBuscaUtc = dataFim.Date.AddDays(2);
+        // Força o DateTimeKind.Utc para o PostgreSQL aceitar a consulta sem gerar erro 500
+        var inicioBuscaUtc = DateTime.SpecifyKind(dataInicio.Date.AddDays(-1), DateTimeKind.Utc);
+        var fimBuscaUtc = DateTime.SpecifyKind(dataFim.Date.AddDays(2), DateTimeKind.Utc);
 
         var query = _context.RegistrosPonto
             .Include(r => r.Usuario)
             .Where(r => r.DataHoraRegistro >= inicioBuscaUtc && r.DataHoraRegistro < fimBuscaUtc);
 
-        if (usuarioId.HasValue)
+        if (usuarioId.HasValue && usuarioId.Value > 0)
+        {
             query = query.Where(r => r.UsuarioId == usuarioId.Value);
+        }
 
         var registros = await query.ToListAsync();
 
