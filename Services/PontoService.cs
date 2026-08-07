@@ -10,6 +10,11 @@ public class PontoService : IPontoService
 {
     private const double JornadaPadraoHoras = 8.0;
 
+    // Coordenadas fixas do local de trabalho  -14.777585578719076, -39.26565705036025
+    private const double LatEmpresa = -14.777585578719076;
+    private const double LonEmpresa = -39.26565705036025;
+    private const double RaioMaximoMetros = 100.0; // Distância máxima permitida em metros
+
     private static readonly TimeZoneInfo FusoBrasilia = TimeZoneInfo.FindSystemTimeZoneById(
         OperatingSystem.IsWindows() ? "E. South America Standard Time" : "America/Sao_Paulo"
     );
@@ -61,8 +66,17 @@ public class PontoService : IPontoService
         };
     }
 
-    public async Task<RegistroPontoResponseDto> RegistrarPontoAsync(int usuarioId, string? ipAddress)
+    public async Task<RegistroPontoResponseDto> RegistrarPontoAsync(int usuarioId, string? ipAddress, double latitude, double longitude)
     {
+        // 1. Valida a distância do usuário em relação à empresa
+        double distanciaMetros = CalcularDistanciaMetros(LatEmpresa, LonEmpresa, latitude, longitude);
+
+        if (distanciaMetros > RaioMaximoMetros)
+        {
+            throw new InvalidOperationException($"Fora do local de trabalho. Você está a {Math.Round(distanciaMetros)}m da empresa (limite permitido: {RaioMaximoMetros}m).");
+        }
+
+        // 2. Valida o fluxo do ciclo do dia
         var statusAtual = await ObterStatusDoDiaAsync(usuarioId);
 
         if (statusAtual.CicloCompleto || statusAtual.ProximoRegistro == null)
@@ -88,7 +102,6 @@ public class PontoService : IPontoService
 
     public async Task<List<RelatorioDiaDto>> GerarRelatorioAsync(DateTime dataInicio, DateTime dataFim, int? usuarioId)
     {
-        // Força o DateTimeKind.Utc para o PostgreSQL aceitar a consulta sem gerar erro 500
         var inicioBuscaUtc = DateTime.SpecifyKind(dataInicio.Date.AddDays(-1), DateTimeKind.Utc);
         var fimBuscaUtc = DateTime.SpecifyKind(dataFim.Date.AddDays(2), DateTimeKind.Utc);
 
@@ -150,6 +163,23 @@ public class PontoService : IPontoService
             .ToList();
 
         return agrupado;
+    }
+
+    private static double CalcularDistanciaMetros(double lat1, double lon1, double lat2, double lon2)
+    {
+        var R = 6371e3; // Raio da Terra em metros
+        var phi1 = lat1 * Math.PI / 180;
+        var phi2 = lat2 * Math.PI / 180;
+        var deltaPhi = (lat2 - lat1) * Math.PI / 180;
+        var deltaLambda = (lon2 - lon1) * Math.PI / 180;
+
+        var a = Math.Sin(deltaPhi / 2) * Math.Sin(deltaPhi / 2) +
+                Math.Cos(phi1) * Math.Cos(phi2) *
+                Math.Sin(deltaLambda / 2) * Math.Sin(deltaLambda / 2);
+
+        var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+
+        return R * c;
     }
 
     private static RegistroPontoResponseDto MapearParaDto(RegistroPonto r) => new()
