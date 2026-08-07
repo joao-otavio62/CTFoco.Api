@@ -1,118 +1,88 @@
-using System.Text;
 using CTFoco.Api.Data;
+using CTFoco.Api.DTOs;
 using CTFoco.Api.Services;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.Authorization;
 
-var builder = WebApplication.CreateBuilder(args);
+namespace CTFoco.Api.Controllers;
 
-// ---------- Serviços ----------
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(options =>
+[ApiController]
+[Route("auth")]      // Aceita requisições para /auth/login
+[Route("api/auth")]  // Aceita requisições para /api/auth/login
+public class AuthController : ControllerBase
 {
-    options.SwaggerDoc("v1", new() { Title = "CT FOCO - Módulo de Ponto API", Version = "v1" });
+    private readonly AppDbContext _context;
+    private readonly ITokenService _tokenService;
 
-    options.AddSecurityDefinition("Bearer", new()
+    public AuthController(AppDbContext context, ITokenService tokenService)
     {
-        Name = "Authorization",
-        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
-        Scheme = "Bearer",
-        BearerFormat = "JWT",
-        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-        Description = "Informe: Bearer {seu_token}"
-    });
+        _context = context;
+        _tokenService = tokenService;
+    }
 
-    options.AddSecurityRequirement(new()
+    /// <summary>
+    /// Permite que o usuário autenticado altere sua própria senha.
+    /// </summary>
+    [Authorize]
+    [HttpPut("alterar-senha")]
+    public async Task<IActionResult> AlterarSenha([FromBody] AlterarSenhaRequestDto request)
     {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
         {
-            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
-            {
-                Reference = new Microsoft.OpenApi.Models.OpenApiReference
-                {
-                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            Array.Empty<string>()
+            return Unauthorized(new { mensagem = "Token inválido ou usuário não autenticado." });
         }
-    });
-});
 
-// ---------- Banco de dados (PostgreSQL) ----------
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException("A connection string 'DefaultConnection' não foi encontrada no appsettings.json.");
+        var usuario = await _context.Usuarios.FindAsync(userId);
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(connectionString));
+        if (usuario == null || !usuario.Ativo)
+        {
+            return NotFound(new { mensagem = "Usuário não encontrado ou inativo." });
+        }
 
-// ---------- Serviços de domínio ----------
-builder.Services.AddScoped<ITokenService, TokenService>();
-builder.Services.AddScoped<IPontoService, PontoService>();
+        if (!BCrypt.Net.BCrypt.Verify(request.SenhaAtual, usuario.PasswordHash))
+        {
+            return BadRequest(new { mensagem = "A senha atual está incorreta." });
+        }
 
-// ---------- Autenticação JWT (RNF Segurança) ----------
-var jwtSettings = builder.Configuration.GetSection("Jwt");
-var chave = jwtSettings["Key"]!;
+        usuario.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NovaSenha);
 
-builder.Services.AddAuthentication(options =>
-{
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
-{
-    options.TokenValidationParameters = new TokenValidationParameters
+        _context.Usuarios.Update(usuario);
+        await _context.SaveChangesAsync();
+
+        return Ok(new { mensagem = "Senha alterada com sucesso." });
+    }
+
+    /// <summary>
+    /// RF01 - Autenticação via usuário e senha predefinidos (sem cadastro aberto).
+    /// </summary>
+    [HttpPost("login")]
+    public async Task<ActionResult<LoginResponseDto>> Login([FromBody] LoginRequestDto request)
     {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtSettings["Issuer"],
-        ValidAudience = jwtSettings["Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(chave)),
-        ClockSkew = TimeSpan.FromMinutes(1)
-    };
-});
+        var usuario = await _context.Usuarios
+            .FirstOrDefaultAsync(u => u.Username == request.Username && u.Ativo);
 
-builder.Services.AddAuthorization();
+        if (usuario == null || !BCrypt.Net.BCrypt.Verify(request.Password, usuario.PasswordHash))
+        {
+            return Unauthorized(new { mensagem = "Usuário ou senha inválidos." });
+        }
 
-// ---------- CORS ----------
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyHeader()
-              .AllowAnyMethod();
-    });
-});
+        var (token, expiraEm) = _tokenService.GerarToken(usuario);
 
-var app = builder.Build();
-
-// ---------- Seed do banco ----------
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-    // Aplica as migrations automaticamente na inicialização (PostgreSQL no Neon DB)
-    db.Database.Migrate();
-
-    SeedData.Inicializar(db);
+        return Ok(new LoginResponseDto
+        {
+            Token = token,
+            ExpiraEm = expiraEm,
+            Usuario = new UsuarioDto
+            {
+                Id = usuario.Id,
+                Nome = usuario.Nome,
+                Username = usuario.Username,
+                Role = usuario.Role
+            }
+        });
+    }
 }
-
-// ---------- Pipeline HTTP ----------
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-
-app.UseHttpsRedirection();
-app.UseCors("AllowAll");
-app.UseAuthentication();
-app.UseAuthorization();
-
-app.MapControllers();
-
-app.Run();
