@@ -8,7 +8,6 @@ using Microsoft.IdentityModel.Tokens;
 var builder = WebApplication.CreateBuilder(args);
 
 // ---------- Serviços ----------
-
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -80,7 +79,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontEnd", policy =>
     {
-        policy.AllowAnyOrigin() 
+        policy.AllowAnyOrigin()
               .AllowAnyHeader()
               .AllowAnyMethod();
     });
@@ -88,15 +87,19 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// ---------- Seed do banco (RF01 - credenciais predefinidas) ----------
+// ---------- Migração e Seed do banco ----------
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    // Aplica as migrações pendentes e cria as tabelas se não existirem
+    db.Database.Migrate();
+
+    // Executa a população inicial
     SeedData.Inicializar(db);
 }
 
 // ---------- Pipeline HTTP ----------
-
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

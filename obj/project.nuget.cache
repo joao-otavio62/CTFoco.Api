@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "nMnazH5YnnU=",
+  "dgSpecHash": "KtfjVUtEKv8=",
   "success": true,
-  "projectFilePath": "C:\\Users\\joaos\\Downloads\\ctfoco-ponto\\ctfoco-ponto-backend\\CTFoco.Api\\CTFoco.Api.csproj",
+  "projectFilePath": "C:\\Users\\joaos\\source\\repos\\joao-otavio62\\CTFoco.Api\\CTFoco.Api.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\joaos\\.nuget\\packages\\bcrypt.net-next\\4.0.3\\bcrypt.net-next.4.0.3.nupkg.sha512",
     "C:\\Users\\joaos\\.nuget\\packages\\humanizer.core\\2.14.1\\humanizer.core.2.14.1.nupkg.sha512",

@@ -6,14 +6,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CTFoco.Api.Services;
 
-/// <summary>
 /// Concentra as regras de negócio de ponto: validação de sequência (RF03),
-/// captura de horário no servidor (RNF) e geração de relatórios (RF04).
-/// </summary>
+/// captura de horário no servidor (RNF), validação de turnos por cargo e geração de relatórios (RF04).
 public class PontoService : IPontoService
 {
-    private const double JornadaPadraoHoras = 8.0;
-
     // Garante compatibilidade de timezone tanto em Windows quanto em Linux/Docker
     private static readonly TimeZoneInfo FusoBrasilia = TimeZoneInfo.FindSystemTimeZoneById(
         OperatingSystem.IsWindows() ? "E. South America Standard Time" : "America/Sao_Paulo"
@@ -24,6 +20,54 @@ public class PontoService : IPontoService
     public PontoService(AppDbContext context)
     {
         _context = context;
+    }
+
+    // Retorna a carga horária diária esperada de acordo com o cargo
+    private static double ObterJornadaPadraoHoras(Cargo cargo) => cargo switch
+    {
+        Cargo.EstagiarioManha => 6.0,
+        Cargo.EstagiarioTarde => 6.0,
+        Cargo.EstagiarioNoite => 6.0,
+        Cargo.Recepcionista => 8.0,
+        _ => 8.0
+    };
+
+    // Valida se o horário atual de Brasília está dentro da janela permitida do cargo
+    private static void ValidarHorarioTurno(Cargo cargo, DateTime utcNow)
+    {
+        var dataHoraBrasilia = ParaHorarioBrasilia(utcNow);
+        var horaAtual = dataHoraBrasilia.TimeOfDay;
+
+        bool dentroDoHorario = cargo switch
+        {
+            // Permitido entre 07:30 e 13:30 (Margem de tolerância)
+            Cargo.EstagiarioManha => horaAtual >= new TimeSpan(7, 30, 0) && horaAtual <= new TimeSpan(13, 30, 0),
+
+            // Permitido entre 12:30 e 18:30
+            Cargo.EstagiarioTarde => horaAtual >= new TimeSpan(12, 30, 0) && horaAtual <= new TimeSpan(18, 30, 0),
+
+            // Permitido entre 17:30 e 23:30
+            Cargo.EstagiarioNoite => horaAtual >= new TimeSpan(17, 30, 0) && horaAtual <= new TimeSpan(23, 30, 0),
+
+            // Recepcionista: Janela ampla (ex: 06:00 às 22:00)
+            Cargo.Recepcionista => horaAtual >= new TimeSpan(6, 0, 0) && horaAtual <= new TimeSpan(22, 0, 0),
+
+            _ => true
+        };
+
+        if (!dentroDoHorario)
+        {
+            var descricaoTurno = cargo switch
+            {
+                Cargo.EstagiarioManha => "Estagiário Manhã (07:30 às 13:30)",
+                Cargo.EstagiarioTarde => "Estagiário Tarde (12:30 às 18:30)",
+                Cargo.EstagiarioNoite => "Estagiário Noite (17:30 às 23:30)",
+                Cargo.Recepcionista => "Recepcionista (06:00 às 22:00)",
+                _ => "Horário permitido"
+            };
+
+            throw new InvalidOperationException($"Registro não permitido fora do seu turno de trabalho. Seu turno é: {descricaoTurno}.");
+        }
     }
 
     public TipoRegistro? ObterProximoTipo(TipoRegistro? ultimoTipo)
@@ -61,6 +105,13 @@ public class PontoService : IPontoService
 
     public async Task<RegistroPontoResponseDto> RegistrarPontoAsync(int usuarioId, string? ipAddress)
     {
+        //Busca usuário para verificar seu Cargo
+        var usuario = await _context.Usuarios.FindAsync(usuarioId)
+            ?? throw new InvalidOperationException("Usuário não encontrado.");
+
+        //Valida se o funcionário/estagiário está tentando bater ponto no seu turno correto
+        ValidarHorarioTurno(usuario.Cargo, DateTime.UtcNow);
+
         var (inicioUtc, fimUtc) = ObterLimitesDoDiaUtc(DateTime.UtcNow);
 
         var ultimoRegistroHoje = await _context.RegistrosPonto
@@ -109,6 +160,10 @@ public class PontoService : IPontoService
             .GroupBy(r => new { r.UsuarioId, Dia = ParaHorarioBrasilia(r.DataHoraRegistro).Date })
             .Select(g =>
             {
+                var usuario = g.First().Usuario;
+                var cargoUsuario = usuario?.Cargo ?? Cargo.Recepcionista;
+                var jornadaEsperada = ObterJornadaPadraoHoras(cargoUsuario);
+
                 var entrada = g.FirstOrDefault(r => r.TipoRegistro == TipoRegistro.Entrada)?.DataHoraRegistro;
                 var inicioIntervalo = g.FirstOrDefault(r => r.TipoRegistro == TipoRegistro.InicioIntervalo)?.DataHoraRegistro;
                 var fimIntervalo = g.FirstOrDefault(r => r.TipoRegistro == TipoRegistro.FimIntervalo)?.DataHoraRegistro;
@@ -132,14 +187,14 @@ public class PontoService : IPontoService
                 return new RelatorioDiaDto
                 {
                     UsuarioId = g.Key.UsuarioId,
-                    NomeUsuario = g.First().Usuario?.Nome ?? "-",
+                    NomeUsuario = usuario?.Nome ?? "-",
                     Data = g.Key.Dia,
                     Entrada = entrada.HasValue ? ParaHorarioBrasilia(entrada.Value) : null,
                     InicioIntervalo = inicioIntervalo.HasValue ? ParaHorarioBrasilia(inicioIntervalo.Value) : null,
                     FimIntervalo = fimIntervalo.HasValue ? ParaHorarioBrasilia(fimIntervalo.Value) : null,
                     Saida = saida.HasValue ? ParaHorarioBrasilia(saida.Value) : null,
                     HorasTrabalhadas = horasTrabalhadas,
-                    SaldoHoras = Math.Round(horasTrabalhadas - JornadaPadraoHoras, 2),
+                    SaldoHoras = Math.Round(horasTrabalhadas - jornadaEsperada, 2), // Calcula saldo contra 6h ou 8h
                     Status = status
                 };
             })

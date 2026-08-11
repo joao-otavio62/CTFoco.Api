@@ -3329,11 +3329,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\joaos\\Downloads\\ctfoco-ponto\\ctfoco-ponto-backend\\CTFoco.Api\\CTFoco.Api.csproj",
+      "projectUniqueName": "C:\\Users\\joaos\\source\\repos\\joao-otavio62\\CTFoco.Api\\CTFoco.Api.csproj",
       "projectName": "CTFoco.Api",
-      "projectPath": "C:\\Users\\joaos\\Downloads\\ctfoco-ponto\\ctfoco-ponto-backend\\CTFoco.Api\\CTFoco.Api.csproj",
+      "projectPath": "C:\\Users\\joaos\\source\\repos\\joao-otavio62\\CTFoco.Api\\CTFoco.Api.csproj",
       "packagesPath": "C:\\Users\\joaos\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\joaos\\Downloads\\ctfoco-ponto\\ctfoco-ponto-backend\\CTFoco.Api\\obj\\",
+      "outputPath": "C:\\Users\\joaos\\source\\repos\\joao-otavio62\\CTFoco.Api\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
