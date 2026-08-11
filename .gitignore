@@ -1,0 +1,80 @@
+## ==========================================
+## COMPILAÇÃO E ARTEFATOS (.NET / C#)
+## ==========================================
+bin/
+obj/
+out/
+publish/
+[Bb]in/
+[Oo]bj/
+
+
+## BANCOS DE DADOS LOCAIS (SQLite / Dev)
+
+# Impede o envio do banco local e logs de transação WAL/SHM
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.mdf
+*.ldf
+
+## ==========================================
+## SEGREDOS E CONFIGURAÇÕES LOCAIS
+## ==========================================
+# Arquivos de variáveis de ambiente
+.env
+.env.*
+!.env.example
+
+# Configurações com credenciais locais/sensíveis
+appsettings.Secrets.json
+appsettings.Local.json
+appsettings.*.Local.json
+*.Secret.json
+
+## ==========================================
+## IDES E EDITORES (Visual Studio / VS Code / Rider)
+## ==========================================
+# Visual Studio
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+
+# VS Code (Mantenha configurações de equipe se necessário)
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains / Rider
+.idea/
+*.sln.iml
+
+## ==========================================
+## LOGS E DIAGNÓSTICOS
+## ==========================================
+[Ll]ogs/
+*.log
+*.sqlite-journal
+
+## ==========================================
+## PACOTES E TESTES
+## ==========================================
+*.nupkg
+packages/
+TestResults/
+*.coverage
+
+## ==========================================
+## SISTEMA OPERACIONAL
+## ==========================================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini

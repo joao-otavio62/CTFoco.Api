@@ -34,7 +34,7 @@ public class UsuariosController : ControllerBase
             Nome = request.Nome,
             Username = request.Username,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword("Funcfoco@2024"), // Senha padrão
-            Role = "Funcionario",
+            Role = "Recepcionista",
             Ativo = true
         };
 
@@ -42,7 +42,7 @@ public class UsuariosController : ControllerBase
         _context.Usuarios.Add(novoFuncionario);
         await _context.SaveChangesAsync();
 
-        return StatusCode(201, new { mensagem = "Funcionário criado com sucesso!" });
+        return StatusCode(201, new { mensagem = "Colaborador criado com sucesso!" });
     }
 
     // Desativa um funcionário do sistema. Acesso exclusivo para Admins.
@@ -54,7 +54,7 @@ public class UsuariosController : ControllerBase
 
         if (usuario == null)
         {
-            return NotFound(new { mensagem = "Funcionário não encontrado." });
+            return NotFound(new { mensagem = "Colaborador não encontrado." });
         }
 
         // Impede que contas com role Admin sejam excluídas por esta rota
@@ -69,7 +69,7 @@ public class UsuariosController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        return Ok(new { mensagem = "Funcionário removido com sucesso." });
+        return Ok(new { mensagem = "Colaborador removido com sucesso." });
     }
 
     [HttpGet]

@@ -8,13 +8,6 @@ namespace CTFoco.Api.Services;
 
 public class PontoService : IPontoService
 {
-    private const double JornadaPadraoHoras = 8.0;
-
-    // Coordenadas fixas do local de trabalho  -14.777585578719076, -39.26565705036025
-    private const double LatEmpresa = -14.777585578719076;
-    private const double LonEmpresa = -39.26565705036025;
-    private const double RaioMaximoMetros = 100.0; // Distância máxima permitida em metros
-
     private static readonly TimeZoneInfo FusoBrasilia = TimeZoneInfo.FindSystemTimeZoneById(
         OperatingSystem.IsWindows() ? "E. South America Standard Time" : "America/Sao_Paulo"
     );
@@ -24,6 +17,44 @@ public class PontoService : IPontoService
     public PontoService(AppDbContext context)
     {
         _context = context;
+    }
+
+    private static double ObterJornadaPadraoHoras(Cargo cargo) => cargo switch
+    {
+        Cargo.EstagiarioManha => 6.0,
+        Cargo.EstagiarioTarde => 6.0,
+        Cargo.EstagiarioNoite => 6.0,
+        Cargo.Recepcionista => 8.0,
+        _ => 8.0
+    };
+
+    private static void ValidarHorarioTurno(Cargo cargo, DateTime utcNow)
+    {
+        var dataHoraBrasilia = ParaHorarioBrasilia(utcNow);
+        var horaAtual = dataHoraBrasilia.TimeOfDay;
+
+        bool dentroDoHorario = cargo switch
+        {
+            Cargo.EstagiarioManha => horaAtual >= new TimeSpan(7, 30, 0) && horaAtual <= new TimeSpan(13, 30, 0),
+            Cargo.EstagiarioTarde => horaAtual >= new TimeSpan(12, 30, 0) && horaAtual <= new TimeSpan(18, 30, 0),
+            Cargo.EstagiarioNoite => horaAtual >= new TimeSpan(17, 30, 0) && horaAtual <= new TimeSpan(23, 30, 0),
+            Cargo.Recepcionista => horaAtual >= new TimeSpan(6, 0, 0) && horaAtual <= new TimeSpan(22, 0, 0),
+            _ => true
+        };
+
+        if (!dentroDoHorario)
+        {
+            var descricaoTurno = cargo switch
+            {
+                Cargo.EstagiarioManha => "Estagiário Manhã (07:30 às 13:30)",
+                Cargo.EstagiarioTarde => "Estagiário Tarde (12:30 às 18:30)",
+                Cargo.EstagiarioNoite => "Estagiário Noite (17:30 às 23:30)",
+                Cargo.Recepcionista => "Recepcionista (06:00 às 22:00)",
+                _ => "Horário permitido"
+            };
+
+            throw new InvalidOperationException($"Registro não permitido fora do seu turno de trabalho. Seu turno é: {descricaoTurno}.");
+        }
     }
 
     public TipoRegistro? ObterProximoTipo(TipoRegistro? ultimoTipo)
@@ -41,19 +72,12 @@ public class PontoService : IPontoService
 
     public async Task<StatusDiaDto> ObterStatusDoDiaAsync(int usuarioId)
     {
-        var agoraBrasilia = ParaHorarioBrasilia(DateTime.UtcNow);
-        var hojeBrasilia = agoraBrasilia.Date;
+        var (inicioUtc, fimUtc) = ObterLimitesDoDiaUtc(DateTime.UtcNow);
 
-        var dataCorteUtc = DateTime.UtcNow.AddDays(-2);
-
-        var registrosRecentes = await _context.RegistrosPonto
-            .Where(r => r.UsuarioId == usuarioId && r.DataHoraRegistro >= dataCorteUtc)
+        var registrosHoje = await _context.RegistrosPonto
+            .Where(r => r.UsuarioId == usuarioId && r.DataHoraRegistro >= inicioUtc && r.DataHoraRegistro < fimUtc)
             .OrderBy(r => r.DataHoraRegistro)
             .ToListAsync();
-
-        var registrosHoje = registrosRecentes
-            .Where(r => ParaHorarioBrasilia(r.DataHoraRegistro).Date == hojeBrasilia)
-            .ToList();
 
         var ultimo = registrosHoje.LastOrDefault();
         var proximo = ObterProximoTipo(ultimo?.TipoRegistro);
@@ -68,18 +92,21 @@ public class PontoService : IPontoService
 
     public async Task<RegistroPontoResponseDto> RegistrarPontoAsync(int usuarioId, string? ipAddress, double latitude, double longitude)
     {
-        // 1. Valida a distância do usuário em relação à empresa
-        double distanciaMetros = CalcularDistanciaMetros(LatEmpresa, LonEmpresa, latitude, longitude);
+        var usuario = await _context.Usuarios.FindAsync(usuarioId)
+            ?? throw new InvalidOperationException("Usuário não encontrado.");
 
-        if (distanciaMetros > RaioMaximoMetros)
-        {
-            throw new InvalidOperationException($"Fora do local de trabalho. Você está a {Math.Round(distanciaMetros)}m da empresa (limite permitido: {RaioMaximoMetros}m).");
-        }
+        ValidarHorarioTurno(usuario.Cargo, DateTime.UtcNow);
 
-        // 2. Valida o fluxo do ciclo do dia
-        var statusAtual = await ObterStatusDoDiaAsync(usuarioId);
+        var (inicioUtc, fimUtc) = ObterLimitesDoDiaUtc(DateTime.UtcNow);
 
-        if (statusAtual.CicloCompleto || statusAtual.ProximoRegistro == null)
+        var ultimoRegistroHoje = await _context.RegistrosPonto
+            .Where(r => r.UsuarioId == usuarioId && r.DataHoraRegistro >= inicioUtc && r.DataHoraRegistro < fimUtc)
+            .OrderByDescending(r => r.DataHoraRegistro)
+            .FirstOrDefaultAsync();
+
+        var proximoTipo = ObterProximoTipo(ultimoRegistroHoje?.TipoRegistro);
+
+        if (proximoTipo == null)
         {
             throw new InvalidOperationException("O ciclo de ponto do dia já foi concluído (Entrada, Intervalo e Saída já registrados).");
         }
@@ -87,9 +114,10 @@ public class PontoService : IPontoService
         var registro = new RegistroPonto
         {
             UsuarioId = usuarioId,
-            TipoRegistro = statusAtual.ProximoRegistro.Value,
+            TipoRegistro = proximoTipo.Value,
             DataHoraRegistro = DateTime.UtcNow,
             IpAddress = ipAddress
+           
         };
 
         _context.RegistrosPonto.Add(registro);
@@ -102,32 +130,30 @@ public class PontoService : IPontoService
 
     public async Task<List<RelatorioDiaDto>> GerarRelatorioAsync(DateTime dataInicio, DateTime dataFim, int? usuarioId)
     {
-        var inicioBuscaUtc = DateTime.SpecifyKind(dataInicio.Date.AddDays(-1), DateTimeKind.Utc);
-        var fimBuscaUtc = DateTime.SpecifyKind(dataFim.Date.AddDays(2), DateTimeKind.Utc);
+        var inicio = dataInicio.Date;
+        var fim = dataFim.Date.AddDays(1);
 
         var query = _context.RegistrosPonto
             .Include(r => r.Usuario)
-            .Where(r => r.DataHoraRegistro >= inicioBuscaUtc && r.DataHoraRegistro < fimBuscaUtc);
+            .Where(r => r.DataHoraRegistro >= inicio && r.DataHoraRegistro < fim);
 
-        if (usuarioId.HasValue && usuarioId.Value > 0)
-        {
+        if (usuarioId.HasValue)
             query = query.Where(r => r.UsuarioId == usuarioId.Value);
-        }
 
         var registros = await query.ToListAsync();
 
         var agrupado = registros
-            .Select(r => new { Registro = r, DataBrasilia = ParaHorarioBrasilia(r.DataHoraRegistro) })
-            .Where(x => x.DataBrasilia.Date >= dataInicio.Date && x.DataBrasilia.Date <= dataFim.Date)
-            .GroupBy(x => new { x.Registro.UsuarioId, Dia = x.DataBrasilia.Date })
+            .GroupBy(r => new { r.UsuarioId, Dia = ParaHorarioBrasilia(r.DataHoraRegistro).Date })
             .Select(g =>
             {
-                var registrosDoDia = g.Select(x => x.Registro).OrderBy(r => r.DataHoraRegistro).ToList();
+                var usuario = g.First().Usuario;
+                var cargoUsuario = usuario?.Cargo ?? Cargo.Recepcionista;
+                var jornadaEsperada = ObterJornadaPadraoHoras(cargoUsuario);
 
-                var entrada = registrosDoDia.FirstOrDefault(r => r.TipoRegistro == TipoRegistro.Entrada)?.DataHoraRegistro;
-                var inicioIntervalo = registrosDoDia.FirstOrDefault(r => r.TipoRegistro == TipoRegistro.InicioIntervalo)?.DataHoraRegistro;
-                var fimIntervalo = registrosDoDia.FirstOrDefault(r => r.TipoRegistro == TipoRegistro.FimIntervalo)?.DataHoraRegistro;
-                var saida = registrosDoDia.FirstOrDefault(r => r.TipoRegistro == TipoRegistro.Saida)?.DataHoraRegistro;
+                var entrada = g.FirstOrDefault(r => r.TipoRegistro == TipoRegistro.Entrada)?.DataHoraRegistro;
+                var inicioIntervalo = g.FirstOrDefault(r => r.TipoRegistro == TipoRegistro.InicioIntervalo)?.DataHoraRegistro;
+                var fimIntervalo = g.FirstOrDefault(r => r.TipoRegistro == TipoRegistro.FimIntervalo)?.DataHoraRegistro;
+                var saida = g.FirstOrDefault(r => r.TipoRegistro == TipoRegistro.Saida)?.DataHoraRegistro;
 
                 double horasTrabalhadas = 0;
                 var cicloCompleto = entrada.HasValue && saida.HasValue;
@@ -147,14 +173,14 @@ public class PontoService : IPontoService
                 return new RelatorioDiaDto
                 {
                     UsuarioId = g.Key.UsuarioId,
-                    NomeUsuario = g.First().Registro.Usuario?.Nome ?? "-",
+                    NomeUsuario = usuario?.Nome ?? "-",
                     Data = g.Key.Dia,
                     Entrada = entrada.HasValue ? ParaHorarioBrasilia(entrada.Value) : null,
                     InicioIntervalo = inicioIntervalo.HasValue ? ParaHorarioBrasilia(inicioIntervalo.Value) : null,
                     FimIntervalo = fimIntervalo.HasValue ? ParaHorarioBrasilia(fimIntervalo.Value) : null,
                     Saida = saida.HasValue ? ParaHorarioBrasilia(saida.Value) : null,
                     HorasTrabalhadas = horasTrabalhadas,
-                    SaldoHoras = Math.Round(horasTrabalhadas - JornadaPadraoHoras, 2),
+                    SaldoHoras = Math.Round(horasTrabalhadas - jornadaEsperada, 2),
                     Status = status
                 };
             })
@@ -163,23 +189,6 @@ public class PontoService : IPontoService
             .ToList();
 
         return agrupado;
-    }
-
-    private static double CalcularDistanciaMetros(double lat1, double lon1, double lat2, double lon2)
-    {
-        var R = 6371e3; // Raio da Terra em metros
-        var phi1 = lat1 * Math.PI / 180;
-        var phi2 = lat2 * Math.PI / 180;
-        var deltaPhi = (lat2 - lat1) * Math.PI / 180;
-        var deltaLambda = (lon2 - lon1) * Math.PI / 180;
-
-        var a = Math.Sin(deltaPhi / 2) * Math.Sin(deltaPhi / 2) +
-                Math.Cos(phi1) * Math.Cos(phi2) *
-                Math.Sin(deltaLambda / 2) * Math.Sin(deltaLambda / 2);
-
-        var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
-
-        return R * c;
     }
 
     private static RegistroPontoResponseDto MapearParaDto(RegistroPonto r) => new()
@@ -192,11 +201,20 @@ public class PontoService : IPontoService
 
     private static DateTime ParaHorarioBrasilia(DateTime utcDate)
     {
-        var dataUtc = utcDate.Kind == DateTimeKind.Utc
-            ? utcDate
-            : DateTime.SpecifyKind(utcDate, DateTimeKind.Utc);
-
+        var dataUtc = DateTime.SpecifyKind(utcDate, DateTimeKind.Utc);
         return TimeZoneInfo.ConvertTimeFromUtc(dataUtc, FusoBrasilia);
+    }
+
+    private static (DateTime InicioUtc, DateTime FimUtc) ObterLimitesDoDiaUtc(DateTime utcNow)
+    {
+        var agoraBrasilia = ParaHorarioBrasilia(utcNow);
+        var inicioDiaBrasilia = agoraBrasilia.Date;
+        var fimDiaBrasilia = inicioDiaBrasilia.AddDays(1);
+
+        var inicioUtc = TimeZoneInfo.ConvertTimeToUtc(inicioDiaBrasilia, FusoBrasilia);
+        var fimUtc = TimeZoneInfo.ConvertTimeToUtc(fimDiaBrasilia, FusoBrasilia);
+
+        return (inicioUtc, fimUtc);
     }
 
     private static string DescricaoTipo(TipoRegistro tipo) => tipo switch

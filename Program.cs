@@ -40,18 +40,15 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-// ---------- Banco de dados (PostgreSQL) ----------
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException("A connection string 'DefaultConnection' não foi encontrada no appsettings.json.");
+// Banco de dados (SQLite por padrão - ver observação no .csproj para trocar por SQL Server/PostgreSQL)
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=ctfoco.db";
+builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite(connectionString));
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(connectionString));
-
-// ---------- Serviços de domínio ----------
+// Serviços de domínio
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IPontoService, PontoService>();
 
-// ---------- Autenticação JWT (RNF Segurança) ----------
+// Autenticação JWT (RNF Segurança)
 var jwtSettings = builder.Configuration.GetSection("Jwt");
 var chave = jwtSettings["Key"]!;
 
@@ -77,10 +74,10 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 
-// ---------- CORS ----------
+// CORS liberado para o front-end (React) em desenvolvimento
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    options.AddPolicy("FrontEnd", policy =>
     {
         policy.AllowAnyOrigin()
               .AllowAnyHeader()
@@ -90,29 +87,28 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// ---------- Seed do banco ----------
+// ---------- Migração e Seed do banco ----------
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-    // Aplica as migrations automaticamente na inicialização (PostgreSQL no Neon DB)
+    // Aplica as migrações pendentes e cria as tabelas se não existirem
     db.Database.Migrate();
 
+    // Executa a população inicial
     SeedData.Inicializar(db);
 }
 
 // ---------- Pipeline HTTP ----------
-app.UseSwagger();
-app.UseSwaggerUI(c =>
+if (app.Environment.IsDevelopment())
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "CT FOCO - Módulo de Ponto API v1");
-    c.RoutePrefix = "swagger";
-});
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 
 app.UseHttpsRedirection();
-app.UseCors("AllowAll");
+app.UseCors("FrontEnd");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-
 app.Run();
