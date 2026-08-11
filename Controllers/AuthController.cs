@@ -4,14 +4,13 @@ using CTFoco.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Query.Internal;
 using Microsoft.AspNetCore.Authorization;
-
 
 namespace CTFoco.Api.Controllers;
 
 [ApiController]
-[Route("api/auth")]
+[Route("auth")]      // Aceita /auth/login
+[Route("api/auth")]  // Aceita /api/auth/login
 public class AuthController : ControllerBase
 {
     private readonly AppDbContext _context;
@@ -23,14 +22,13 @@ public class AuthController : ControllerBase
         _tokenService = tokenService;
     }
 
-    
+    /// <summary>
     /// Permite que o usuário autenticado altere sua própria senha.
-
-    [Authorize] // Garante que apenas usuários logados com Token acessem
+    /// </summary>
+    [Authorize]
     [HttpPut("alterar-senha")]
     public async Task<IActionResult> AlterarSenha([FromBody] AlterarSenhaRequestDto request)
     {
-        //Extrai o ID do usuário direto do Token JWT (claim NameIdentifier que você definiu no TokenService)
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
         if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
@@ -38,7 +36,6 @@ public class AuthController : ControllerBase
             return Unauthorized(new { mensagem = "Token inválido ou usuário não autenticado." });
         }
 
-        //Busca o usuário no banco de dados
         var usuario = await _context.Usuarios.FindAsync(userId);
 
         if (usuario == null || !usuario.Ativo)
@@ -46,13 +43,11 @@ public class AuthController : ControllerBase
             return NotFound(new { mensagem = "Usuário não encontrado ou inativo." });
         }
 
-        //Verifica se a senha atual enviada bate com o Hash salvo no banco
         if (!BCrypt.Net.BCrypt.Verify(request.SenhaAtual, usuario.PasswordHash))
         {
             return BadRequest(new { mensagem = "A senha atual está incorreta." });
         }
 
-        //Se passou, criptografa a nova senha e atualiza no banco
         usuario.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NovaSenha);
 
         _context.Usuarios.Update(usuario);

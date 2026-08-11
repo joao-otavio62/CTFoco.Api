@@ -7,8 +7,9 @@ using Microsoft.AspNetCore.Mvc;
 namespace CTFoco.Api.Controllers;
 
 [ApiController]
+[Route("ponto")]
 [Route("api/ponto")]
-[Authorize] // Admin e Funcionário podem bater ponto (RF02)
+[Authorize]
 public class PontoController : ControllerBase
 {
     private readonly IPontoService _pontoService;
@@ -19,8 +20,7 @@ public class PontoController : ControllerBase
     }
 
     /// <summary>
-    /// RF03 - Retorna os registros do dia e qual o próximo estado esperado,
-    /// para o front-end decidir o rótulo do botão.
+    /// RF03 - Retorna os registros do dia e qual o próximo estado esperado.
     /// </summary>
     [HttpGet("status")]
     public async Task<ActionResult<StatusDiaDto>> ObterStatus()
@@ -31,18 +31,17 @@ public class PontoController : ControllerBase
     }
 
     /// <summary>
-    /// RF02 / RNF - Registra o próximo ponto do funcionário.
-    /// O horário é capturado no servidor (DateTime.UtcNow); o front-end NUNCA envia data/hora.
+    /// RF02 / RNF - Registra o ponto validando a localização recebida do front-end.
     /// </summary>
     [HttpPost("registrar")]
-    public async Task<ActionResult<RegistroPontoResponseDto>> Registrar()
+    public async Task<ActionResult<RegistroPontoResponseDto>> Registrar([FromBody] RegistrarPontoRequestDto request)
     {
         var usuarioId = ObterUsuarioId();
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         try
         {
-            var registro = await _pontoService.RegistrarPontoAsync(usuarioId, ip);
+            var registro = await _pontoService.RegistrarPontoAsync(usuarioId, ip, request.Latitude, request.Longitude);
             return Ok(registro);
         }
         catch (InvalidOperationException ex)

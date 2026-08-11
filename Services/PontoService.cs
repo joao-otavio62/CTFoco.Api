@@ -6,11 +6,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CTFoco.Api.Services;
 
-/// Concentra as regras de negócio de ponto: validação de sequência (RF03),
-/// captura de horário no servidor (RNF), validação de turnos por cargo e geração de relatórios (RF04).
 public class PontoService : IPontoService
 {
-    // Garante compatibilidade de timezone tanto em Windows quanto em Linux/Docker
     private static readonly TimeZoneInfo FusoBrasilia = TimeZoneInfo.FindSystemTimeZoneById(
         OperatingSystem.IsWindows() ? "E. South America Standard Time" : "America/Sao_Paulo"
     );
@@ -22,7 +19,6 @@ public class PontoService : IPontoService
         _context = context;
     }
 
-    // Retorna a carga horária diária esperada de acordo com o cargo
     private static double ObterJornadaPadraoHoras(Cargo cargo) => cargo switch
     {
         Cargo.EstagiarioManha => 6.0,
@@ -32,7 +28,6 @@ public class PontoService : IPontoService
         _ => 8.0
     };
 
-    // Valida se o horário atual de Brasília está dentro da janela permitida do cargo
     private static void ValidarHorarioTurno(Cargo cargo, DateTime utcNow)
     {
         var dataHoraBrasilia = ParaHorarioBrasilia(utcNow);
@@ -40,18 +35,10 @@ public class PontoService : IPontoService
 
         bool dentroDoHorario = cargo switch
         {
-            // Permitido entre 07:30 e 13:30 (Margem de tolerância)
             Cargo.EstagiarioManha => horaAtual >= new TimeSpan(7, 30, 0) && horaAtual <= new TimeSpan(13, 30, 0),
-
-            // Permitido entre 12:30 e 18:30
             Cargo.EstagiarioTarde => horaAtual >= new TimeSpan(12, 30, 0) && horaAtual <= new TimeSpan(18, 30, 0),
-
-            // Permitido entre 17:30 e 23:30
             Cargo.EstagiarioNoite => horaAtual >= new TimeSpan(17, 30, 0) && horaAtual <= new TimeSpan(23, 30, 0),
-
-            // Recepcionista: Janela ampla (ex: 06:00 às 22:00)
             Cargo.Recepcionista => horaAtual >= new TimeSpan(6, 0, 0) && horaAtual <= new TimeSpan(22, 0, 0),
-
             _ => true
         };
 
@@ -78,7 +65,7 @@ public class PontoService : IPontoService
             TipoRegistro.Entrada => TipoRegistro.InicioIntervalo,
             TipoRegistro.InicioIntervalo => TipoRegistro.FimIntervalo,
             TipoRegistro.FimIntervalo => TipoRegistro.Saida,
-            TipoRegistro.Saida => null, // Ciclo do dia completo
+            TipoRegistro.Saida => null,
             _ => TipoRegistro.Entrada
         };
     }
@@ -103,13 +90,11 @@ public class PontoService : IPontoService
         };
     }
 
-    public async Task<RegistroPontoResponseDto> RegistrarPontoAsync(int usuarioId, string? ipAddress)
+    public async Task<RegistroPontoResponseDto> RegistrarPontoAsync(int usuarioId, string? ipAddress, double latitude, double longitude)
     {
-        //Busca usuário para verificar seu Cargo
         var usuario = await _context.Usuarios.FindAsync(usuarioId)
             ?? throw new InvalidOperationException("Usuário não encontrado.");
 
-        //Valida se o funcionário/estagiário está tentando bater ponto no seu turno correto
         ValidarHorarioTurno(usuario.Cargo, DateTime.UtcNow);
 
         var (inicioUtc, fimUtc) = ObterLimitesDoDiaUtc(DateTime.UtcNow);
@@ -132,6 +117,7 @@ public class PontoService : IPontoService
             TipoRegistro = proximoTipo.Value,
             DataHoraRegistro = DateTime.UtcNow,
             IpAddress = ipAddress
+           
         };
 
         _context.RegistrosPonto.Add(registro);
@@ -194,7 +180,7 @@ public class PontoService : IPontoService
                     FimIntervalo = fimIntervalo.HasValue ? ParaHorarioBrasilia(fimIntervalo.Value) : null,
                     Saida = saida.HasValue ? ParaHorarioBrasilia(saida.Value) : null,
                     HorasTrabalhadas = horasTrabalhadas,
-                    SaldoHoras = Math.Round(horasTrabalhadas - jornadaEsperada, 2), // Calcula saldo contra 6h ou 8h
+                    SaldoHoras = Math.Round(horasTrabalhadas - jornadaEsperada, 2),
                     Status = status
                 };
             })
