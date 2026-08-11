@@ -35,10 +35,10 @@ public class PontoService : IPontoService
 
         bool dentroDoHorario = cargo switch
         {
-            Cargo.EstagiarioManha => horaAtual >= new TimeSpan(7, 30, 0) && horaAtual <= new TimeSpan(13, 30, 0),
-            Cargo.EstagiarioTarde => horaAtual >= new TimeSpan(12, 30, 0) && horaAtual <= new TimeSpan(18, 30, 0),
-            Cargo.EstagiarioNoite => horaAtual >= new TimeSpan(17, 30, 0) && horaAtual <= new TimeSpan(23, 30, 0),
-            Cargo.Recepcionista => horaAtual >= new TimeSpan(6, 0, 0) && horaAtual <= new TimeSpan(22, 0, 0),
+            Cargo.EstagiarioManha => horaAtual >= new TimeSpan(6, 0, 0) && horaAtual <= new TimeSpan(11, 0, 0),
+            Cargo.EstagiarioTarde => horaAtual >= new TimeSpan(14, 0, 0) && horaAtual <= new TimeSpan(17, 30, 0),
+            Cargo.EstagiarioNoite => horaAtual >= new TimeSpan(17, 30, 0) && horaAtual <= new TimeSpan(21, 0, 0),
+            Cargo.Recepcionista => horaAtual >= new TimeSpan(6, 0, 0) && horaAtual <= new TimeSpan(18, 0, 0),
             _ => true
         };
 
@@ -46,10 +46,10 @@ public class PontoService : IPontoService
         {
             var descricaoTurno = cargo switch
             {
-                Cargo.EstagiarioManha => "Estagiário Manhã (07:30 às 13:30)",
-                Cargo.EstagiarioTarde => "Estagiário Tarde (12:30 às 18:30)",
-                Cargo.EstagiarioNoite => "Estagiário Noite (17:30 às 23:30)",
-                Cargo.Recepcionista => "Recepcionista (06:00 às 22:00)",
+                Cargo.EstagiarioManha => "Estagiário Manhã (06:00 às 11:00)",
+                Cargo.EstagiarioTarde => "Estagiário Tarde (14:00 às 17:30)",
+                Cargo.EstagiarioNoite => "Estagiário Noite (17:30 às 21:00)",
+                Cargo.Recepcionista => "Recepcionista (06:00 às 18:00)",
                 _ => "Horário permitido"
             };
 
