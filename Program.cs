@@ -40,9 +40,9 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-// Banco de dados (SQLite por padrão - ver observação no .csproj para trocar por SQL Server/PostgreSQL)
+// Banco de dados (Alterado para PostgreSQL para rodar no Render)
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=ctfoco.db";
-builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite(connectionString));
+builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 
 // Serviços de domínio
 builder.Services.AddScoped<ITokenService, TokenService>();
