@@ -40,8 +40,11 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-// Banco de dados (Alterado para PostgreSQL para rodar no Render)
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=ctfoco.db";
+// Banco de dados (Configurado para PostgreSQL / Neon DB)
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? builder.Configuration["DATABASE_URL"]
+    ?? "Host=localhost;Database=ctfoco;Username=postgres;Password=postgres";
+
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 
 // Serviços de domínio
@@ -92,7 +95,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-    // Aplica as migrações pendentes e cria as tabelas se não existirem
+    // Aplica as migrações pendentes e cria as tabelas no Neon DB
     db.Database.Migrate();
 
     // Executa a população inicial
