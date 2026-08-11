@@ -8,9 +8,9 @@ publish/
 [Bb]in/
 [Oo]bj/
 
-## ==========================================
+
 ## BANCOS DE DADOS LOCAIS (SQLite / Dev)
-## ==========================================
+
 # Impede o envio do banco local e logs de transação WAL/SHM
 *.db
 *.db-shm
