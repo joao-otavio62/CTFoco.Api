@@ -8,9 +8,29 @@ namespace CTFoco.Api.Services;
 
 public class PontoService : IPontoService
 {
-    private static readonly TimeZoneInfo FusoBrasilia = TimeZoneInfo.FindSystemTimeZoneById(
-        OperatingSystem.IsWindows() ? "E. South America Standard Time" : "America/Sao_Paulo"
-    );
+    private static readonly TimeZoneInfo FusoBrasilia = ObterFusoHorarioBrasilia();
+
+    private static TimeZoneInfo ObterFusoHorarioBrasilia()
+    {
+        string[] idsTentar = OperatingSystem.IsWindows()
+            ? new[] { "E. South America Standard Time", "Brazil Eastern Standard Time" }
+            : new[] { "America/Sao_Paulo", "America/Bahia", "Brazil/East" };
+
+        foreach (var id in idsTentar)
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById(id);
+            }
+            catch
+            {
+                // Continua para o próximo ID
+            }
+        }
+
+        // Fallback para GMT-3 caso o contêiner Linux não possua a base tzdata instalada
+        return TimeZoneInfo.CreateCustomTimeZone("BrasiliaFallback", TimeSpan.FromHours(-3), "Horário de Brasília", "Horário de Brasília");
+    }
 
     private readonly AppDbContext _context;
 
@@ -117,7 +137,6 @@ public class PontoService : IPontoService
             TipoRegistro = proximoTipo.Value,
             DataHoraRegistro = DateTime.UtcNow,
             IpAddress = ipAddress
-           
         };
 
         _context.RegistrosPonto.Add(registro);
@@ -130,8 +149,9 @@ public class PontoService : IPontoService
 
     public async Task<List<RelatorioDiaDto>> GerarRelatorioAsync(DateTime dataInicio, DateTime dataFim, int? usuarioId)
     {
-        var inicio = dataInicio.Date;
-        var fim = dataFim.Date.AddDays(1);
+        // Garante que o Kind seja Utc para evitar exceções do Npgsql/PostgreSQL
+        var inicio = DateTime.SpecifyKind(dataInicio.Date, DateTimeKind.Utc);
+        var fim = DateTime.SpecifyKind(dataFim.Date.AddDays(1), DateTimeKind.Utc);
 
         var query = _context.RegistrosPonto
             .Include(r => r.Usuario)
