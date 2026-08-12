@@ -17,15 +17,15 @@ public class RelatoriosController : ControllerBase
         _pontoService = pontoService;
     }
 
-
+    /// <summary>
     /// RF04 - Listagem de horas trabalhadas por funcionário, com filtro de data/período.
-    /// Ex: GET /api/relatorios?dataInicio=2026-08-01&amp;dataFim=2026-08-04&amp;usuarioId=2
-
+    /// Ex: GET /api/relatorios?dataInicio=2026-08-01&dataFim=2026-08-04&usuarioId=2
+    /// </summary>
     [HttpGet]
     public async Task<ActionResult<List<RelatorioDiaDto>>> Obter(
-    [FromQuery] DateTime? dataInicio,
-    [FromQuery] DateTime? dataFim,
-    [FromQuery] int? usuarioId)
+        [FromQuery] DateTime? dataInicio,
+        [FromQuery] DateTime? dataFim,
+        [FromQuery] int? usuarioId)
     {
         try
         {
@@ -40,7 +40,7 @@ public class RelatoriosController : ControllerBase
         }
         catch (Exception ex)
         {
-            
             return StatusCode(500, new { mensagemErro = ex.Message, stackTrace = ex.StackTrace });
         }
     }
+}
