@@ -103,7 +103,6 @@ using (var scope = app.Services.CreateScope())
 }
 
 // ---------- Pipeline HTTP ----------
-if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
